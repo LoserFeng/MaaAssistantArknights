@@ -399,10 +399,7 @@ namespace MaaWpfGui.Services.RemoteControl
                         {
                             await _runningState.UntilIdleAsync();
                             Instances.RecognizerViewModel.GachaOnce();
-                            while (!Instances.RecognizerViewModel.GachaDone)
-                            {
-                                await Task.Delay(100); // 暂停100毫秒以避免密集循环
-                            }
+                            await _runningState.UntilIdleAsync();
 
                             break;
                         }
@@ -411,10 +408,7 @@ namespace MaaWpfGui.Services.RemoteControl
                         {
                             await _runningState.UntilIdleAsync();
                             Instances.RecognizerViewModel.GachaTenTimes();
-                            while (!Instances.RecognizerViewModel.GachaDone)
-                            {
-                                await Task.Delay(100); // 暂停100毫秒以避免密集循环
-                            }
+                            await _runningState.UntilIdleAsync();
 
                             break;
                         }
@@ -619,10 +613,6 @@ namespace MaaWpfGui.Services.RemoteControl
                 /*await Task.Run(() => Instances.SettingsViewModel.RunScript("StartsWithScript"));*/
 
                 Instances.TaskQueueViewModel.AddLog(LocalizationHelper.GetString("ConnectingToEmulator"));
-                if (!Instances.SettingsViewModel.AdbReplaced && !Instances.SettingsViewModel.IsAdbTouchMode())
-                {
-                    Instances.TaskQueueViewModel.AddLog(LocalizationHelper.GetString("AdbReplacementTips"), UiLogColor.Info);
-                }
 
                 // 一般是点了“停止”按钮了
                 if (Instances.TaskQueueViewModel.Stopping)

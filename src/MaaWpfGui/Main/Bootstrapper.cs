@@ -15,6 +15,8 @@ using System;
 using System.Diagnostics;
 using System.IO;
 using System.Reflection;
+using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using System.Security.Principal;
 using System.Threading.Tasks;
 using System.Windows;
@@ -24,6 +26,7 @@ using System.Windows.Threading;
 using GlobalHotKey;
 using MaaWpfGui.Configuration;
 using MaaWpfGui.Helper;
+using MaaWpfGui.Properties;
 using MaaWpfGui.Services;
 using MaaWpfGui.Services.HotKeys;
 using MaaWpfGui.Services.Managers;
@@ -73,9 +76,21 @@ namespace MaaWpfGui.Main
             */
 
             Directory.SetCurrentDirectory(AppContext.BaseDirectory);
-            if (Directory.Exists("debug") is false)
+            if (!Directory.Exists("debug"))
             {
                 Directory.CreateDirectory("debug");
+            }
+
+            // TODO: Remove after 5.10.0
+            string[] filesToDelete = ["MAA_win7.exe", "启动旧版.cmd"];
+            string curDir = Directory.GetCurrentDirectory();
+            foreach (var file in filesToDelete)
+            {
+                string path = Path.Combine(curDir, file);
+                if (File.Exists(path))
+                {
+                    File.Delete(path);
+                }
             }
 
             const string LogFilename = "debug/gui.log";
@@ -93,20 +108,22 @@ namespace MaaWpfGui.Main
             // Bootstrap serilog
             var loggerConfiguration = new LoggerConfiguration()
                 .WriteTo.Debug(
-                    outputTemplate: "[{Timestamp:HH:mm:ss} {Level:u3}] <{ThreadId}><{ThreadName}> {Message:lj}{NewLine}{Exception}")
+                    outputTemplate: "[{Timestamp:HH:mm:ss}][{Level:u3}] <{ThreadId}><{ThreadName}> {Message:lj}{NewLine}{Exception}")
                 .WriteTo.File(
                     LogFilename,
-                    outputTemplate: "[{Timestamp:yyyy-MM-dd HH:mm:ss.fff}] <{ThreadId}><{ThreadName}> {Message:lj}{NewLine}{Exception}")
+                    outputTemplate: "[{Timestamp:yyyy-MM-dd HH:mm:ss.fff}][{Level:u3}] <{ThreadId}><{ThreadName}> {Message:lj}{NewLine}{Exception}")
                 .Enrich.FromLogContext()
                 .Enrich.WithThreadId()
                 .Enrich.WithThreadName();
 
             var uiVersion = Assembly.GetExecutingAssembly().GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion.Split('+')[0] ?? "0.0.1";
             uiVersion = uiVersion == "0.0.1" ? "DEBUG VERSION" : uiVersion;
+            var builtDate = Assembly.GetExecutingAssembly().GetCustomAttribute<BuildDateTimeAttribute>()?.BuildDateTime ?? DateTime.MinValue;
             var maaEnv = Environment.GetEnvironmentVariable("MAA_ENVIRONMENT") == "Debug"
                 ? "Debug"
                 : "Production";
-            loggerConfiguration = maaEnv == "Debug"
+            var withDebugFile = File.Exists("DEBUG") || File.Exists("DEBUG.txt");
+            loggerConfiguration = (maaEnv == "Debug" || withDebugFile)
                 ? loggerConfiguration.MinimumLevel.Verbose()
                 : loggerConfiguration.MinimumLevel.Information();
 
@@ -114,9 +131,15 @@ namespace MaaWpfGui.Main
             _logger = Log.Logger.ForContext<Bootstrapper>();
             _logger.Information("===================================");
             _logger.Information("MaaAssistantArknights GUI started");
-            _logger.Information("Version {UiVersion}", uiVersion);
-            _logger.Information("Maa ENV: {MaaEnv}", maaEnv);
-            _logger.Information("User Dir {CurrentDirectory}", Directory.GetCurrentDirectory());
+            _logger.Information($"Version {uiVersion}");
+            _logger.Information($"Built at {builtDate:O}");
+            _logger.Information($"Maa ENV: {maaEnv}");
+            _logger.Information($"User Dir {Directory.GetCurrentDirectory()}");
+            if (withDebugFile)
+            {
+                _logger.Information("Start with DEBUG file");
+            }
+
             if (IsUserAdministrator())
             {
                 _logger.Information("Run as Administrator");
@@ -157,6 +180,18 @@ namespace MaaWpfGui.Main
             ConfigurationHelper.Load();
             LocalizationHelper.Load();
             ETagCache.Load();
+
+            // 检查 MaaCore.dll 是否存在
+            if (!File.Exists("MaaCore.dll"))
+            {
+                throw new FileNotFoundException("MaaCore.dll not found!");
+            }
+
+            // 检查 resource 文件夹是否存在
+            if (!Directory.Exists("resource"))
+            {
+                throw new DirectoryNotFoundException("resource folder not found!");
+            }
         }
 
         private static bool IsUserAdministrator()
@@ -216,15 +251,7 @@ namespace MaaWpfGui.Main
             */
 
             // MessageBox.Show("O(∩_∩)O 拜拜");
-            ETagCache.Save();
-            Instances.SettingsViewModel.Sober();
-            Instances.MaaHotKeyManager.Release();
-
-            // 关闭程序时清理操作中心中的通知
-            ToastNotification.Cleanup();
-
-            ConfigurationHelper.Release();
-            ConfigFactory.Release();
+            Release();
 
             _logger.Information("MaaAssistantArknights GUI exited");
             _logger.Information(string.Empty);
@@ -249,6 +276,19 @@ namespace MaaWpfGui.Main
             Process.Start(startInfo);
         }
 
+        public static void Release()
+        {
+            ETagCache.Save();
+            Instances.SettingsViewModel.Sober();
+            Instances.MaaHotKeyManager.Release();
+
+            // 关闭程序时清理操作中心中的通知
+            ToastNotification.Cleanup();
+
+            ConfigurationHelper.Release();
+            ConfigFactory.Release();
+        }
+
         private static bool _isRestartingWithoutArgs;
 
         /// <summary>
@@ -261,9 +301,9 @@ namespace MaaWpfGui.Main
             Execute.OnUIThread(Application.Current.Shutdown);
         }
 
-        public static void Shutdown()
+        public static void Shutdown([CallerMemberName]string caller = "")
         {
-            _logger.Information("Shutdown");
+            _logger.Information($"Shutdown called by {caller}");
             Execute.OnUIThread(Application.Current.Shutdown);
         }
 
@@ -285,13 +325,32 @@ namespace MaaWpfGui.Main
         /// <inheritdoc/>
         protected override void OnUnhandledException(DispatcherUnhandledExceptionEventArgs e)
         {
+            LogUnhandledException(e.Exception);
+            ShowErrorDialog(e.Exception);
+            e.Handled = true;
+        }
+
+        private static void LogUnhandledException(Exception exception)
+        {
             if (_logger != Logger.None)
             {
-                _logger.Fatal(e.Exception, "Unhandled exception");
+                _logger.Fatal(exception, "Unhandled exception occurred");
             }
+        }
 
-            var errorView = new ErrorView(e.Exception, true);
-            errorView.ShowDialog();
+        private static void ShowErrorDialog(Exception exception)
+        {
+            Application.Current.Dispatcher.Invoke(() =>
+            {
+                // DragDrop.DoDragSourceMove 会导致崩溃，但不需要退出程序
+                // 这是一坨屎，但是没办法，只能这样了
+                var isDragDropException = exception is COMException && exception.ToString()!.Contains("DragDrop.DoDragSourceMove");
+
+                var shouldExit = !isDragDropException;
+
+                var errorView = new ErrorView(exception, shouldExit);
+                errorView.ShowDialog();
+            });
         }
     }
 }

@@ -21,6 +21,8 @@
 #include "Utils/Platform.hpp"
 #include "Utils/StringMisc.hpp"
 
+#include <regex>
+
 asst::AdbController::AdbController(const AsstCallback& callback, Assistant* inst, PlatformType type)
     : InstHelper(inst)
     , m_callback(callback)
@@ -211,6 +213,23 @@ void asst::AdbController::init_mumu_extras(const AdbCfg& adb_cfg [[maybe_unused]
     int mumu_index = adb_cfg.extras.get("index", 0);
     int mumu_display = adb_cfg.extras.get("display", 0);
     m_mumu_extras.init(mumu_path, mumu_index, mumu_display);
+#endif
+}
+
+void asst::AdbController::init_ld_extras(const AdbCfg& adb_cfg [[maybe_unused]])
+{
+#if !ASST_WITH_EMULATOR_EXTRAS
+    Log.error("MaaCore is not compiled with ASST_WITH_EMULATOR_EXTRAS");
+#else
+    if (adb_cfg.extras.empty()) {
+        LogWarn << "adb_cfg.extras is empty";
+        return;
+    }
+
+    std::filesystem::path ld_path = utils::path(adb_cfg.extras.get("path", ""));
+    int ld_index = adb_cfg.extras.get("index", 0);
+    int ld_pid = adb_cfg.extras.get("pid", 0);
+    m_ld_extras.init(ld_path, ld_index, ld_pid, m_width, m_height);
 #endif
 }
 
@@ -456,10 +475,10 @@ bool asst::AdbController::screencap(cv::Mat& image_payload, bool allow_reconnect
         auto min_cost = milliseconds(LLONG_MAX);
         clear_lf_info();
 
-        auto start_time = high_resolution_clock::now();
+        auto start_time = steady_clock::now();
         if (m_support_socket && m_server_started
             && screencap(m_adb.screencap_raw_by_nc, decode_raw, allow_reconnect, true, 5000)) {
-            auto duration = duration_cast<milliseconds>(high_resolution_clock::now() - start_time);
+            auto duration = duration_cast<milliseconds>(steady_clock::now() - start_time);
             if (duration < min_cost) {
                 m_adb.screencap_method = AdbProperty::ScreencapMethod::RawByNc;
                 m_inited = true;
@@ -472,9 +491,9 @@ bool asst::AdbController::screencap(cv::Mat& image_payload, bool allow_reconnect
         }
         clear_lf_info();
 
-        start_time = high_resolution_clock::now();
+        start_time = steady_clock::now();
         if (screencap(m_adb.screencap_raw_with_gzip, decode_raw_with_gzip, allow_reconnect)) {
-            auto duration = duration_cast<milliseconds>(high_resolution_clock::now() - start_time);
+            auto duration = duration_cast<milliseconds>(steady_clock::now() - start_time);
             if (duration < min_cost) {
                 m_adb.screencap_method = AdbProperty::ScreencapMethod::RawWithGzip;
                 m_inited = true;
@@ -487,9 +506,9 @@ bool asst::AdbController::screencap(cv::Mat& image_payload, bool allow_reconnect
         }
         clear_lf_info();
 
-        start_time = high_resolution_clock::now();
+        start_time = steady_clock::now();
         if (screencap(m_adb.screencap_encode, decode_encode, allow_reconnect)) {
-            auto duration = duration_cast<milliseconds>(high_resolution_clock::now() - start_time);
+            auto duration = duration_cast<milliseconds>(steady_clock::now() - start_time);
             if (duration < min_cost) {
                 m_adb.screencap_method = AdbProperty::ScreencapMethod::Encode;
                 m_inited = true;
@@ -503,10 +522,10 @@ bool asst::AdbController::screencap(cv::Mat& image_payload, bool allow_reconnect
 
 #if ASST_WITH_EMULATOR_EXTRAS
         if (m_mumu_extras.inited()) {
-            start_time = high_resolution_clock::now();
+            start_time = steady_clock::now();
             if (m_mumu_extras.screencap()) {
                 auto duration =
-                    duration_cast<milliseconds>(high_resolution_clock::now() - start_time);
+                    duration_cast<milliseconds>(steady_clock::now() - start_time);
                 if (duration < min_cost) {
                     m_adb.screencap_method = AdbProperty::ScreencapMethod::MumuExtras;
                     m_inited = true;
@@ -518,6 +537,22 @@ bool asst::AdbController::screencap(cv::Mat& image_payload, bool allow_reconnect
                 Log.info("MumuExtras is not supported");
             }
         }
+        if (m_ld_extras.inited()) {
+            start_time = steady_clock::now();
+            if (m_ld_extras.screencap()) {
+                auto duration = duration_cast<milliseconds>(steady_clock::now() - start_time);
+                if (duration < min_cost) {
+                    m_adb.screencap_method = AdbProperty::ScreencapMethod::LDExtras;
+                    m_inited = true;
+                    min_cost = duration;
+                }
+                Log.info("LDExtras cost", duration.count(), "ms");
+            }
+            else {
+                Log.info("LDExtras is not supported");
+            }
+        
+        }
 #endif
 
         static const std::unordered_map<AdbProperty::ScreencapMethod, std::string> MethodName = {
@@ -527,6 +562,7 @@ bool asst::AdbController::screencap(cv::Mat& image_payload, bool allow_reconnect
             { AdbProperty::ScreencapMethod::Encode, "Encode" },
 #if ASST_WITH_EMULATOR_EXTRAS
             { AdbProperty::ScreencapMethod::MumuExtras, "MumuExtras" },
+            { AdbProperty::ScreencapMethod::LDExtras, "LDExtras" },
 #endif
         };
         Log.info(
@@ -572,6 +608,20 @@ bool asst::AdbController::screencap(cv::Mat& image_payload, bool allow_reconnect
             if (!screencap_ret && allow_reconnect) {
                 m_mumu_extras.reload();
                 img_opt = m_mumu_extras.screencap();
+                screencap_ret = img_opt.has_value();
+            }
+
+            if (screencap_ret) {
+                image_payload = img_opt.value();
+            }
+        } break;
+        case AdbProperty::ScreencapMethod::LDExtras: {
+            auto img_opt = m_ld_extras.screencap();
+            screencap_ret = img_opt.has_value();
+
+            if (!screencap_ret && allow_reconnect) {
+                m_ld_extras.reload();
+                img_opt = m_ld_extras.screencap();
                 screencap_ret = img_opt.has_value();
             }
 
@@ -754,6 +804,34 @@ bool asst::AdbController::connect(
 
     /* connect */
     {
+        // 先用 devices 读取输出
+        m_adb.devices = cmd_replace(adb_cfg.devices);
+        m_adb.address_regex = cmd_replace(adb_cfg.address_regex);
+        auto devices_ret = call_command(m_adb.devices, 60LL * 1000, false);
+        bool need_connect = true;
+        if (devices_ret) {
+            const auto& devices_str = devices_ret.value();
+            const std::regex address_regex(m_adb.address_regex);
+            for (std::sregex_iterator iter(devices_str.begin(), devices_str.end(), address_regex), end; iter != end; ++iter) {
+                if (iter->size() > 1 && iter->str(1) == address) {
+                    need_connect = false;
+                    break;
+                }
+            }
+        }
+
+        // 如果不包含 `:` 且需要连接，connect 命令也不会成功
+        if (address.find(':') == std::string::npos && need_connect) {
+            json::value info = get_info_json()
+                               | json::object {
+                                     { "what", "ConnectFailed" },
+                                     { "why", "Address does not contain ':' and no devices found" },
+                                 };
+            callback(AsstMsg::ConnectionInfo, info);
+            return false;
+        }
+
+        // TODO: adb lite server 尚未实现，第一次连接需要执行一次 adb.exe 启动 daemon
         m_adb.connect = cmd_replace(adb_cfg.connect);
         m_adb.release = cmd_replace(adb_cfg.release);
         auto connect_ret =
@@ -761,12 +839,15 @@ bool asst::AdbController::connect(
         bool is_connect_success = false;
         if (connect_ret) {
             auto& connect_str = connect_ret.value();
-            is_connect_success = connect_str.find("error") == std::string::npos;
+            // 检查连接字符串是否包含 "connected"
+            is_connect_success = connect_str.find("connected") != std::string::npos;
+            // NOTE:这玩意啥都没干，有什么用吗？
             if (connect_str.find("daemon started successfully") != std::string::npos
                 && connect_str.find("daemon still not running") == std::string::npos) {
             }
         }
-        if (!is_connect_success) {
+
+        if (!is_connect_success && need_connect) {
             json::value info = get_info_json()
                                | json::object {
                                      { "what", "ConnectFailed" },
@@ -952,6 +1033,9 @@ bool asst::AdbController::connect(
 
     if (config == "MuMuEmulator12") {
         init_mumu_extras(adb_cfg);
+    }
+    else if (config == "LDPlayer") {
+        init_ld_extras(adb_cfg);
     }
 
     if (need_exit()) {

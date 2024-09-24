@@ -271,9 +271,9 @@
             ["凜冬", "凛冬"],
             ["^德克薩斯", "德克萨斯"],
             ["賈維", "贾维"],
-            ["葦草", "苇草"],
+            ["^葦草", "苇草"],
             ["極境", "极境"],
-            ["詩懷雅", "诗怀雅"],
+            ["^詩懷雅", "诗怀雅"],
             ["芙蘭卡", "芙兰卡"],
             ["偵測器", "侦测器"],
             ["指揮終端", "指挥终端"],
@@ -616,7 +616,11 @@
             ["祭壇式雷達", "祭坛式雷达"],
             ["R-45便攜式“留聲機”", "R-45便携式“留声机”"],
             ["“二踢腳”型數據收集裝置", "“二踢脚”型数据收集装置"],
-            ["勘察用自走車", "勘察用自走车"]
+            ["勘察用自走車", "勘察用自走车"],
+            ["喚血祭壇", "唤血祭坛"],
+            ["維荻", "维荻"],
+            ["瀝血王座", "沥血王座"],
+            ["炸彈載荷點", "炸弹载荷点"]
         ]
     },
     "StartToWakeUpOCR": {
@@ -689,9 +693,6 @@
     },
     "VisitNextOcr": {
         "text": ["訪問下位"]
-    },
-    "Mall": {
-        "text": ["採", "採購", "中心"]
     },
     "VisitLimited": {
         "text": ["今日參與", "已達上限"]
@@ -946,6 +947,12 @@
     "BattleStartOCR": {
         "text": ["行動", "開始"]
     },
+    "BattleStartSimulation": {
+        "Doc": "Delete the template and remove this modified roi task when paradox update comes PR#10439",
+        "roi": [417, 567, 444, 153],
+        "method": "Ccoeff",
+        "colorScales": []
+    },
     "SSSBegin": {
         "text": ["開始保全作戰"]
     },
@@ -1002,6 +1009,12 @@
     },
     "GachaTenTimesPrefix@DoGacha": {
         "text": ["尋訪十次", "訪十次"]
+    },
+    "RA@Navigation-RecogniseTheme": {
+        "text": ["演算", "開始", "继续演算"]
+    },
+    "RA@Navigation-EnterCurrentTheme": {
+        "text": ["生息演算"]
     },
     "RoguelikeChooseSupportBtnOcr": {
         "text": ["選擇助戰"]

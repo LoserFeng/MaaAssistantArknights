@@ -157,7 +157,7 @@ namespace MaaWpfGui.ViewModels.UI
         /// </summary>
         private void ClearLog()
         {
-            LogItemViewModels.Clear();
+            Execute.OnUIThread(() => LogItemViewModels.Clear());
         }
 
         private string _filename = string.Empty;
@@ -1027,10 +1027,6 @@ namespace MaaWpfGui.ViewModels.UI
             }
 
             AddLog(LocalizationHelper.GetString("ConnectingToEmulator"));
-            if (!Instances.SettingsViewModel.AdbReplaced && !Instances.SettingsViewModel.IsAdbTouchMode())
-            {
-                AddLog(LocalizationHelper.GetString("AdbReplacementTips"), UiLogColor.Info);
-            }
 
             string errMsg = string.Empty;
             _caught = await Task.Run(() => Instances.AsstProxy.AsstConnect(ref errMsg));

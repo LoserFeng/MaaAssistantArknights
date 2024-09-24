@@ -27,6 +27,12 @@
         "text": ["Rerun", "Retrospection"],
         "roi": [0, 500, 500, 150]
     },
+    "CR-OpenOcr": {
+        "text": ["Skydiving", "stages", "opened"]
+    },
+    "CRChapterToCR": {
+        "text": ["Roam", "Exhibition", "ROAM", "EXHIBITION"]
+    },
     "HS-9": {
         "sub": ["HS-Open", "HSChapterToHS"]
     },
@@ -444,7 +450,7 @@
             ["L-44 'Gramophone'", "L-44\"留声机\""],
             ["Offspring", "子代"],
             ["Enforcer", "见行者"],
-            ["Reinforcement Device", "加固装置"],
+            ["^Reinforcement Device$", "加固装置"],
             ["Temporary Rhodes Island Empl[oyee]*", "罗德岛临时雇员"],
             ["Goldenglow", "澄闪"],
             ["Unowned Treasure", "无主的财富"],
@@ -800,7 +806,12 @@
             ["Mail Box", "信使邮筒"],
             ["Message Casket", "讯息匣"],
             ["Overspeed Spice", "失衡异香"],
-            ["Billboard", "告示牌"]
+            ["Billboard", "告示牌"],
+            ["Doc", "医生"],
+            ["Ela", "艾拉"],
+            ["[Iil]ana", "双月"],
+            ["Fuze", "导火索"],
+            ["Grzmot Mine", "雷鸣地雷"]
         ]
     },
     "StartToWakeUpOCR": {
@@ -893,9 +904,6 @@
     "VisitNextOcr": {
         "text": ["Visit Next"]
     },
-    "Mall": {
-        "text": ["Store", "STORE"]
-    },
     "CreditStoreOcr": {
         "text": ["Credit Store"]
     },
@@ -954,7 +962,7 @@
         "maskRange": [1, 255]
     },
     "InfrastStationedInfo": {
-        "text": ["Operator"]
+        "text": ["Operator", "Operato"]
     },
     "InfrastEnterOperList": {
         "fullMatch": true,
@@ -1213,7 +1221,10 @@
         "roi": [1000, 404, 210, 220]
     },
     "BattleStartSimulation": {
-        "roi": [400, 566, 481, 154]
+        "Doc": "Delete the template and remove this modified roi task when paradox update comes PR#10439",
+        "roi": [400, 566, 481, 154],
+        "method": "Ccoeff",
+        "colorScales": []
     },
     "BattleOperName": {
         "roi": [5, 177, 280, 37]
@@ -1315,6 +1326,12 @@
     },
     "GachaTenTimesPrefix@DoGacha": {
         "text": ["Headhunt x10"]
+    },
+    "RA@Navigation-RecogniseTheme": {
+        "text": ["Commence", "Resume"]
+    },
+    "RA@Navigation-EnterCurrentTheme": {
+        "text": ["Reclamation", "Algorithm"]
     },
     "RoguelikeChooseSupportBtnOcr": {
         "text": ["Select Support"]
@@ -2623,6 +2640,16 @@
     },
     "Tales@RA@FinishCalc": {
         "text": ["Tap anywhere to continue"]
+    },
+    "Tales@RA@PIS-ProsperityBelowLimit-LoadSave": {
+        "docRef": "https://github.com/MaaAssistantArknights/MaaAssistantArknights/commit/bed66f2c7b8b3f6bd195659121a3d9a0acff8f8b",
+        "doc": "Needs to be edited if confirmation window is removed later",
+        "sub": [
+            "Tales@RA@DialogConfirmYellow",
+            "Tales@RA@DialogConfirmRed",
+            "Tales@RA@SelectSecondLastSave",
+            "Tales@RA@ConfirmToLoadSave"
+        ]
     },
     "Tales@RA@PIS-ProsperityReachLimit-LoadSave": {
         "docRef": "https://github.com/MaaAssistantArknights/MaaAssistantArknights/commit/bed66f2c7b8b3f6bd195659121a3d9a0acff8f8b",

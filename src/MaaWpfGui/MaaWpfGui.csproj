@@ -42,6 +42,12 @@
     <InformationalVersion>0.0.1</InformationalVersion>
   </PropertyGroup>
 
+  <ItemGroup>
+    <AssemblyAttribute Include="MaaWpfGui.Properties.BuildDateTime">
+      <_Parameter1>$([System.DateTime]::UtcNow.ToString("O"))</_Parameter1>
+    </AssemblyAttribute>
+  </ItemGroup>
+
   <!-- Info -->
   <PropertyGroup>
     <ApplicationIcon>newlogo.ico</ApplicationIcon>
@@ -75,6 +81,7 @@
   <ItemGroup>
     <AdditionalFiles Include="stylecop.json" />
     <Resource Include="newlogo.ico" />
+    <Resource Include="Res\Backgrounds\Congratulations.png" />
     <None Include="..\..\README.md" Pack="True" PackagePath="/" />
   </ItemGroup>
 

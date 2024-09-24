@@ -32,12 +32,12 @@ const fullySupport = shuffleArray([
     {
         name: 'MuMu Emulator 12',
         link: 'https://mumu.163.com/',
-        note: 'Fully compatible, with additional support for the [exclusive Extreme Control Mode](../connection.html#mumu-screenshot-enhanced-mode). Known to be compatible with Hyper-V.\n\n- The "Exit emulator when done" function may occasionally be abnormal, if you encounter it, please contact MuMu official for feedback;\n- If you are using MuMu 12 version 3.5.4 ~ 3.5.7, please disable the "Keep alive in the background" function in MuMu 12 Settings - Others. "Keep alive while hanging in the background" (see [Official Announcement](https://mumu.163.com/help/20230802/35047_1102450.html) for details);\n- You need to check the port information of the corresponding instance through the ADB button of MuMu 12 Multiple Opener when you open more than one instance, and change the port number of the connection address in MAA `Settings` - `Connection Settings` to the corresponding port.',
+        note: 'Fully compatible, with additional support for the [Screenshot Enhanced Mode](../connection.html#mumu-screenshot-enhanced-mode). Known to be compatible with Hyper-V.\n\n- The "Exit emulator when done" function may occasionally be abnormal, if you encounter it, please contact MuMu official for feedback;\n- If you are using MuMu 12 version 3.5.4 ~ 3.5.7, please disable the "Keep alive in the background" function in MuMu 12 Settings - Others. "Keep alive while hanging in the background" (see [Official Announcement](https://mumu.163.com/help/20230802/35047_1102450.html) for details);\n- You need to check the port information of the corresponding instance through the ADB button of MuMu 12 Multiple Opener when you open more than one instance, and change the port number of the connection address in MAA `Settings` - `Connection Settings` to the corresponding port.',
     },
     {
         name: 'LDPlayer',
         link: 'https://www.ldmnq.com/',
-        note: 'Fully compatible. Known to be compatible with Hyper-V.\n\n- LDPlayer 9 is recommended to use version 9.0.57 and above; LDPlayer 5 is recommended to use version 5.0.67 and above;\n- For versions lower than the above, you need to run `Forced ADB Replacement` in `Settings` - `Connection` in order to use efficient touch modes such as Minitouch and MaaTouch.',
+        note: 'Fully compatible, with additional support for the [Screenshot Enhanced Mode](../connection.html#ld-screenshot-enhanced-mode). Known to be compatible with Hyper-V.\n\n- LDPlayer 9 installer will automatically and silently disable Hyper-V during the installation process. Please pay attention if you have related needs.\n- LDPlayer 9 is recommended to use version 9.0.57 and above; LDPlayer 5 is recommended to use version 5.0.67 and above;\n- For versions lower than the above, you need to run `Forced ADB Replacement` in `Settings` - `Connection` in order to use efficient touch modes such as Minitouch and MaaTouch.',
     },
     {
         name: 'Nox',
@@ -48,11 +48,6 @@ const fullySupport = shuffleArray([
         name: 'Memu',
         link: 'https://www.xyaz.cn/',
         note: 'Fully compatible, but less tested.',
-    },
-    {
-        name: 'Google Play Games (Developer)',
-        link: 'https://developer.android.com/games/playgames/emulator?hl=zh-cn',
-        note: 'Fully compatible, but less tested. Hyper-V must be turned on and you must be logged into a Google account.',
     },
 ]);
 
@@ -71,6 +66,11 @@ const partiallySupport = shuffleArray([
         name: 'AVD',
         link: 'https://developer.android.com/studio/run/managing-avds',
         note: 'Theoretical support.\n\n- Starting from Android 10, Minitouch is no longer available when SELinux is in `Enforcing` mode, please switch to other touch modes, or switch SELinux **temporary** to `Permissive` mode.\n- AVD is made for debugging, it is more recommended to use other emulators designed for gaming.',
+    },
+    {
+        name: 'Google Play Games (Developer)',
+        link: 'https://developer.android.com/games/playgames/emulator?hl=zh-cn',
+        note: 'Theoretical support. Hyper-V must be enabled, and a Google account must be logged in.\n\n- You need to use [custom connection](../connection.html) to connect, the ADB port is `6520`.\n- Due to the SELinux policy of Android 10 and later versions, Minitouch cannot work properly, please switch to other touch modes.\n- The first connection after each emulator startup will fail, you need to check `Attempt to kill and restart ADB process after connection failure`.',
     },
 ]);
 

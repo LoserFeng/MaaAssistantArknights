@@ -37,6 +37,25 @@ namespace MaaWpfGui.Views.UI
 
         public string ExceptionDetails { get; set; }
 
+        private bool _congratulationsOnError = true;
+
+        public string ErrorString { get; set; } = LocalizationHelper.GetString("Error");
+
+        public string ErrorCongratulationsString { get; set; } = LocalizationHelper.GetString("ErrorCongratulations");
+
+        /// <summary>
+        /// Gets or sets a value indicating whether to enable congratulation mode for ErrorView.
+        /// </summary>
+        public bool CongratulationsOnError
+        {
+            get => _congratulationsOnError;
+            set
+            {
+                _congratulationsOnError = value;
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(CongratulationsOnError)));
+            }
+        }
+
         public ErrorView()
         {
             InitializeComponent();
@@ -80,6 +99,12 @@ namespace MaaWpfGui.Views.UI
         private static string GetSolution(string error, string details)
         {
             _ = error; // To avoid warning
+            if (details.Contains("MaaCore.dll not found!") ||
+                details.Contains("resource folder not found!"))
+            {
+                return LocalizationHelper.GetString("ErrorSolutionMoveMaaExeOutOfFolder");
+            }
+
             if (details.Contains("AsstGetVersion()") ||
                 details.Contains("DllNotFoundException") ||
                 details.Contains("lambda_method") ||
@@ -125,18 +150,15 @@ namespace MaaWpfGui.Views.UI
 
         private void CopyToClipboard()
         {
-            var range = new TextRange(RichTextBox.Document.ContentStart, RichTextBox.Document.ContentEnd);
             var data = new DataObject();
-            data.SetText(range.Text);
-            if (range.CanSave(DataFormats.Rtf))
-            {
-                var ms = new MemoryStream();
-                range.Save(ms, DataFormats.Rtf);
-                var arr = ms.ToArray();
-
-                // Save to RTF doesn't write non-ascii characters (implementation-defined behavior?)
-                data.SetData(DataFormats.Rtf, Encoding.UTF8.GetString(arr));
-            }
+            var textToCopy =
+                $"{LocalizationHelper.GetString("ErrorProlog")}\n" +
+                $"\t{ExceptionMessage}\n" +
+                $"{LocalizationHelper.GetString("ErrorSolution")}\n" +
+                $"\t{PossibleSolution}\n" +
+                $"{LocalizationHelper.GetString("ErrorDetails")}\n" +
+                $"{ExceptionDetails}";
+            data.SetText(textToCopy);
 
             try
             {

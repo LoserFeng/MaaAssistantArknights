@@ -21,8 +21,8 @@ using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
+using System.Timers;
 using System.Windows;
-using System.Windows.Threading;
 using MaaWpfGui.Constants;
 using MaaWpfGui.Extensions;
 using MaaWpfGui.Helper;
@@ -119,10 +119,10 @@ namespace MaaWpfGui.ViewModels.UI
             if (actions.BackToAndroidHome)
             {
                 Instances.AsstProxy.AsstBackToHome();
-
                 await Task.Delay(1000);
             }
-            else if (actions.ExitArknights)
+
+            if (actions.ExitArknights)
             {
                 var mode = Instances.SettingsViewModel.ClientType;
                 if (!Instances.AsstProxy.AsstStartCloseDown(mode))
@@ -136,11 +136,10 @@ namespace MaaWpfGui.ViewModels.UI
             if (actions.ExitEmulator)
             {
                 DoKillEmulator();
-
                 await Task.Delay(1000);
             }
 
-            if (actions.ExitSelf && !(actions.Hibernate || actions.Shutdown))
+            if (actions.ExitSelf && !(actions.Hibernate || actions.Shutdown || actions.Sleep))
             {
                 Bootstrapper.Shutdown();
             }
@@ -153,12 +152,7 @@ namespace MaaWpfGui.ViewModels.UI
                 }
                 else
                 {
-                    DoHibernate();
-                }
-
-                if (actions.ExitSelf)
-                {
-                    Bootstrapper.Shutdown();
+                    await DoHibernate();
                 }
             }
 
@@ -170,8 +164,25 @@ namespace MaaWpfGui.ViewModels.UI
                 }
                 else
                 {
-                    DoShutDown();
+                    await DoShutDown();
                 }
+            }
+
+            if (actions.Sleep)
+            {
+                if (actions.IfNoOtherMaa && HasOtherMaa())
+                {
+                    Bootstrapper.Shutdown();
+                }
+                else
+                {
+                    await DoSleep();
+                }
+            }
+
+            if (actions.ExitSelf)
+            {
+                Bootstrapper.Shutdown();
             }
 
             actions.LoadPostActions();
@@ -179,7 +190,9 @@ namespace MaaWpfGui.ViewModels.UI
 
             bool HasOtherMaa()
             {
-                return Process.GetProcessesByName("MAA").Length > 1;
+                var processesCount = Process.GetProcessesByName("MAA").Length;
+                _logger.Information($"MAA processes count: {processesCount}");
+                return processesCount > 1;
             }
 
             void DoKillEmulator()
@@ -190,42 +203,45 @@ namespace MaaWpfGui.ViewModels.UI
                 }
             }
 
-            void DoHibernate()
+            async Task DoHibernate()
             {
                 actions.LoadPostActions();
 
                 // 休眠提示
                 AddLog(LocalizationHelper.GetString("HibernatePrompt"), UiLogColor.Error);
-
-                /*
-                // 休眠不能加时间参数，https://github.com/MaaAssistantArknights/MaaAssistantArknights/issues/1133
-                Process.Start("shutdown.exe", "-h");
-                */
+                await Task.Delay(10000);
                 PowerManagement.Hibernate();
             }
 
-            async void DoShutDown()
+            async Task DoShutDown()
             {
-                /*
-                Process.Start("shutdown.exe", "-s -t 60");
+                _logger.Information("Shutdown in 70 seconds.");
+                Process.Start("shutdown.exe", "-s -t 70");
 
-                // 关机询问
-                var shutdownResult = MessageBoxHelper.Show(LocalizationHelper.GetString("AboutToShutdown"), LocalizationHelper.GetString("ShutdownPrompt"), MessageBoxButton.OK, MessageBoxImage.Question, ok: LocalizationHelper.GetString("Cancel"));
-                if (shutdownResult == MessageBoxResult.OK)
-                {
-                    Process.Start("shutdown.exe", "-a");
-                }
-                */
+                Instances.MainWindowManager?.Show();
                 if (await TimerCanceledAsync(
                         LocalizationHelper.GetString("Shutdown"),
                         LocalizationHelper.GetString("AboutToShutdown"),
                         LocalizationHelper.GetString("Cancel"),
                         60))
                 {
+                    _logger.Information("Shutdown canceled.");
+                    Process.Start("shutdown.exe", "-a");
                     return;
                 }
 
-                PowerManagement.Shutdown();
+                _logger.Information("Shutdown not canceled, proceeding to exit application.");
+                Bootstrapper.Shutdown();
+            }
+
+            async Task DoSleep()
+            {
+                actions.LoadPostActions();
+
+                // 休眠提示
+                AddLog(LocalizationHelper.GetString("SleepPrompt"), UiLogColor.Error);
+                await Task.Delay(10000);
+                PowerManagement.Sleep();
             }
         }
 
@@ -283,7 +299,7 @@ namespace MaaWpfGui.ViewModels.UI
 
         public bool Closing { get; set; }
 
-        private readonly DispatcherTimer _timer = new();
+        private readonly Timer _timer = new();
 
         public bool ConfirmExit()
         {
@@ -305,12 +321,6 @@ namespace MaaWpfGui.ViewModels.UI
                 return true;
             }
 
-            if (!Instances.RecognizerViewModel.GachaDone)
-            {
-                // no need to confirm if Gacha running
-                return true;
-            }
-
             var result = MessageBoxHelper.Show(
                 LocalizationHelper.GetString("ConfirmExitText"),
                 LocalizationHelper.GetString("ConfirmExitTitle"),
@@ -327,16 +337,25 @@ namespace MaaWpfGui.ViewModels.UI
 
         private void InitTimer()
         {
-            _timer.Interval = TimeSpan.FromSeconds(59);
-            _timer.Tick += Timer1_Elapsed;
+            _timer.Interval = 50 * 1000;
+            _timer.Elapsed += Timer1_Elapsed;
             _timer.Start();
         }
+
+        private DateTime _lastTimerElapsed = DateTime.MinValue;
 
         private async void Timer1_Elapsed(object sender, EventArgs e)
         {
             // 提前记录时间，避免等待超过定时时间
             DateTime currentTime = DateTime.Now;
             currentTime = new DateTime(currentTime.Year, currentTime.Month, currentTime.Day, currentTime.Hour, currentTime.Minute, 0);
+
+            if (currentTime == _lastTimerElapsed)
+            {
+                return;
+            }
+
+            _lastTimerElapsed = currentTime;
 
             HandleDatePromptUpdate();
             HandleCheckForUpdates();
@@ -402,7 +421,7 @@ namespace MaaWpfGui.ViewModels.UI
             });
         }
 
-        private static (bool timeToStart, bool timeToChangeConfig, int configIndex) CheckTimers(DateTime currentTime)
+        private static (bool _timeToStart, bool _timeToChangeConfig, int _configIndex) CheckTimers(DateTime currentTime)
         {
             bool timeToStart = false;
             bool timeToChangeConfig = false;
@@ -448,6 +467,7 @@ namespace MaaWpfGui.ViewModels.UI
 
             return (timeToStart, timeToChangeConfig, configIndex);
         }
+
         private async Task HandleTimerLogic(DateTime currentTime)
         {
             if (!_runningState.GetIdle() && !Instances.SettingsViewModel.ForceScheduledStart)
@@ -459,12 +479,14 @@ namespace MaaWpfGui.ViewModels.UI
 
             if (timeToChangeConfig)
             {
+                _logger.Information($"Scheduled configuration change: Timer Index: {configIndex}");
                 HandleConfigChange(configIndex);
                 return;
             }
 
             if (timeToStart)
             {
+                _logger.Information($"Scheduled start: Timer Index: {configIndex}");
                 await HandleScheduledStart(configIndex);
             }
         }
@@ -522,23 +544,30 @@ namespace MaaWpfGui.ViewModels.UI
             LinkStart();
         }
 
-        private static async Task<bool> TimerCanceledAsync(string content = "", string tipContent = "", string buttonContent="", int seconds = 10)
+        private static async Task<bool> TimerCanceledAsync(string content = "", string tipContent = "", string buttonContent = "", int seconds = 10)
         {
-            var delay = TimeSpan.FromSeconds(seconds);
-            var dialogUserControl = new Views.UserControl.TextDialogWithTimerUserControl(
-                content,
-                tipContent,
-                buttonContent,
-                delay.TotalMilliseconds);
-            var dialog = HandyControl.Controls.Dialog.Show(dialogUserControl, nameof(Views.UI.RootView));
             var canceled = false;
-            dialogUserControl.Click += (_, _) =>
+            await await Application.Current.Dispatcher.InvokeAsync(async () =>
             {
-                canceled = true;
+                var delay = TimeSpan.FromSeconds(seconds);
+                var dialogUserControl = new Views.UserControl.TextDialogWithTimerUserControl(
+                    content,
+                    tipContent,
+                    buttonContent,
+                    delay.TotalMilliseconds);
+                var dialog = HandyControl.Controls.Dialog.Show(dialogUserControl, nameof(Views.UI.RootView));
+                var tcs = new TaskCompletionSource<bool>();
+                dialogUserControl.Click += (_, _) =>
+                {
+                    canceled = true;
+                    dialog.Close();
+                    tcs.TrySetResult(true);
+                };
+                await Task.WhenAny(Task.Delay(delay), tcs.Task);
                 dialog.Close();
-            };
-            await Task.Delay(delay);
-            dialog.Close();
+                _logger.Information($"Timer canceled: {canceled}");
+            });
+
             return canceled;
         }
 
@@ -558,7 +587,7 @@ namespace MaaWpfGui.ViewModels.UI
                 "AutoRoguelike",
             ];
 
-            if (!(Instances.SettingsViewModel.ClientType is "txwy"))
+            if (Instances.SettingsViewModel.ClientType is not "txwy")
             {
                 taskList.Add("Reclamation");
             }
@@ -570,14 +599,18 @@ namespace MaaWpfGui.ViewModels.UI
                 var task = taskList[i];
                 bool parsed = int.TryParse(ConfigurationHelper.GetTaskOrder(task, "-1"), out var order);
 
-                var vm = new DragItemViewModel(LocalizationHelper.GetString(task), task, "TaskQueue.");
+                DragItemViewModel vm = new DragItemViewModel(
+                    LocalizationHelper.GetString(task),
+                    task,
+                    "TaskQueue.",
+                    task is not ("AutoRoguelike" or "Reclamation"));
 
                 if (task == TaskSettingVisibilityInfo.DefaultVisibleTaskSetting)
                 {
                     vm.EnableSetting = true;
                 }
 
-                if (!parsed || order < 0 || order >= tempOrderList.Count)
+                if (!parsed || order < 0 || order >= tempOrderList.Count || tempOrderList[order] != null)
                 {
                     nonOrderList.Add(vm);
                 }
@@ -596,6 +629,7 @@ namespace MaaWpfGui.ViewModels.UI
                 }
 
                 tempOrderList[i] = newVm;
+                ConfigurationHelper.SetTaskOrder(newVm.OriginalName, i.ToString());
             }
 
             TaskItemViewModels = new ObservableCollection<DragItemViewModel>(tempOrderList);
@@ -784,9 +818,12 @@ namespace MaaWpfGui.ViewModels.UI
         /// </summary>
         private void ClearLog()
         {
-            LogItemViewModels.Clear();
-            _logger.Information("Main windows log clear.");
-            _logger.Information(string.Empty);
+            Execute.OnUIThread(() =>
+            {
+                LogItemViewModels.Clear();
+                _logger.Information("Main windows log clear.");
+                _logger.Information(string.Empty);
+            });
         }
 
         /// <summary>
@@ -1027,8 +1064,6 @@ namespace MaaWpfGui.ViewModels.UI
 
             _runningState.SetIdle(false);
 
-            Instances.SettingsViewModel.SetupSleepManagement();
-
             // 虽然更改时已经保存过了，不过保险起见在点击开始之后再次保存任务和基建列表
             TaskItemSelectionChanged();
             Instances.SettingsViewModel.InfrastOrderSelectionChanged();
@@ -1037,22 +1072,31 @@ namespace MaaWpfGui.ViewModels.UI
 
             ClearLog();
 
+            var buildDateTimeLong = SettingsViewModel.BuildDateTimeCurrentCultureString;
+            var resourceDateTimeLong = Instances.SettingsViewModel.ResourceDateTimeCurrentCultureString;
+            AddLog($"Build Time:\n{buildDateTimeLong}\nResource Time:\n{resourceDateTimeLong}");
+
             var uiVersion = SettingsViewModel.UiVersion;
             var coreVersion = SettingsViewModel.CoreVersion;
             if (uiVersion != coreVersion &&
                 Instances.VersionUpdateViewModel.IsStdVersion(uiVersion) &&
                 Instances.VersionUpdateViewModel.IsStdVersion(coreVersion))
             {
-                AddLog(string.Format(LocalizationHelper.GetString("VersionMismatch"), uiVersion, coreVersion), UiLogColor.Warning);
+                AddLog(string.Format(LocalizationHelper.GetString("VersionMismatch"), uiVersion, coreVersion), UiLogColor.Error);
+                return;
             }
 
             await Task.Run(() => Instances.SettingsViewModel.RunScript("StartsWithScript"));
 
             AddLog(LocalizationHelper.GetString("ConnectingToEmulator"));
+
+            /*
+            // 现在的主流模拟器都已经更新过自带的 adb 了，不再需要替换
             if (!Instances.SettingsViewModel.AdbReplaced && !Instances.SettingsViewModel.IsAdbTouchMode())
             {
                 AddLog(LocalizationHelper.GetString("AdbReplacementTips"), UiLogColor.Info);
             }
+            */
 
             // 一般是点了“停止”按钮了
             if (Stopping)
@@ -1149,6 +1193,7 @@ namespace MaaWpfGui.ViewModels.UI
             if (taskRet)
             {
                 AddLog(LocalizationHelper.GetString("Running"));
+                Instances.AsstProxy.StartTaskTime = DateTimeOffset.Now;
             }
             else
             {
@@ -1263,10 +1308,14 @@ namespace MaaWpfGui.ViewModels.UI
             await Task.Run(() => Instances.SettingsViewModel.RunScript("StartsWithScript"));
 
             AddLog(LocalizationHelper.GetString("ConnectingToEmulator"));
+
+            /*
+            // 现在的主流模拟器都已经更新过自带的 adb 了，不再需要替换
             if (!Instances.SettingsViewModel.AdbReplaced && !Instances.SettingsViewModel.IsAdbTouchMode())
             {
                 AddLog(LocalizationHelper.GetString("AdbReplacementTips"), UiLogColor.Info);
             }
+            */
 
             // 一般是点了“停止”按钮了
             if (Stopping)
@@ -1615,7 +1664,9 @@ namespace MaaWpfGui.ViewModels.UI
             return Instances.AsstProxy.AsstAppendReclamation(
                 Instances.SettingsViewModel.ReclamationTheme,
                 mode,
-                Instances.SettingsViewModel.ReclamationToolToCraft);
+                Instances.SettingsViewModel.ReclamationToolToCraft,
+                Instances.SettingsViewModel.ReclamationIncrementMode,
+                Instances.SettingsViewModel.ReclamationMaxCraftCountPerRound);
         }
 
         [DllImport("User32.dll", EntryPoint = "FindWindow")]
@@ -2495,17 +2546,6 @@ namespace MaaWpfGui.ViewModels.UI
             }
         }
 
-        private bool _useAlternateStage = Convert.ToBoolean(ConfigurationHelper.GetValue(ConfigurationKeys.UseAlternateStage, bool.FalseString));
-
-        /// <summary>
-        /// Gets or sets a value indicating whether to use alternate stage.
-        /// </summary>
-        public bool UseAlternateStage
-        {
-            get => _useAlternateStage;
-            set => SetAndNotify(ref _useAlternateStage, value);
-        }
-
         private bool _useRemainingSanityStage = Convert.ToBoolean(ConfigurationHelper.GetValue(ConfigurationKeys.UseRemainingSanityStage, bool.TrueString));
 
         public bool UseRemainingSanityStage
@@ -2816,7 +2856,10 @@ namespace MaaWpfGui.ViewModels.UI
         /// </summary>
         public void ResetFightVariables()
         {
-            UseStone = false;
+            if (UseStoneWithNull == null)
+            {
+                UseStone = false;
+            }
 
             if (UseMedicineWithNull == null)
             {
@@ -2887,7 +2930,10 @@ namespace MaaWpfGui.ViewModels.UI
             }
         }
 
-        private bool? _useStoneWithNull = false;
+        public static string UseStoneString => LocalizationHelper.GetString("UseOriginitePrime");
+
+        private bool? _useStoneWithNull = Convert.ToBoolean(ConfigurationHelper.GetValue(ConfigurationKeys.UseMedicine, bool.FalseString)) &&
+                                          Convert.ToBoolean(ConfigurationHelper.GetValue(ConfigurationKeys.UseStone, bool.FalseString));
 
         /// <summary>
         /// Gets or sets a value indicating whether to use originiums with null.
@@ -2897,19 +2943,29 @@ namespace MaaWpfGui.ViewModels.UI
             get => _useStoneWithNull;
             set
             {
+                if (!TaskSettingDataContext.AllowUseStoneSave && value == true)
+                {
+                    value = null;
+                }
+
                 SetAndNotify(ref _useStoneWithNull, value);
                 if (value != false)
                 {
                     MedicineNumber = "999";
                     if (!UseMedicine)
                     {
-                        UseMedicineWithNull = null;
+                        UseMedicineWithNull = value;
                     }
                 }
 
+                // IsEnabled="{c:Binding UseStone}"
                 NotifyOfPropertyChange(nameof(UseStone));
 
                 SetFightParams();
+                if (TaskSettingDataContext.AllowUseStoneSave)
+                {
+                    ConfigurationHelper.SetValue(ConfigurationKeys.UseStone, (value ?? false).ToString());
+                }
             }
         }
 
@@ -3011,17 +3067,6 @@ namespace MaaWpfGui.ViewModels.UI
                 SetFightParams();
                 ConfigurationHelper.SetValue(ConfigurationKeys.SeriesQuantity, value);
             }
-        }
-
-        private bool _hideSeries = Convert.ToBoolean(ConfigurationHelper.GetValue(ConfigurationKeys.HideSeries, bool.FalseString));
-
-        /// <summary>
-        /// Gets or sets a value indicating whether to hide series.
-        /// </summary>
-        public bool HideSeries
-        {
-            get => _hideSeries;
-            set => SetAndNotify(ref _hideSeries, value);
         }
 
         #region Drops

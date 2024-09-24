@@ -180,49 +180,7 @@ jobs:
 
       - name: Check if only sorted and Templates
         id: check_sorted_templates
-        run: |
-          git status
-
-          $gitdiff = git diff --numstat HEAD 2>$null | findstr -i resource
-          if ($LASTEXITCODE -ne 0) {
-            Write-Output "no diff"
-            exit 0
-          }
-
-          Write-Output $gitdiff
-
-          $diff = $false
-          $hasPng = $false
-
-          $diffLines = $gitdiff -split "`n"
-
-          foreach ($line in $diffLines) {
-              $parts = $line -split "\s+"
-              $filePath = $parts[2]
-              $firstNumber = $parts[0]
-              $secondNumber = $parts[1]
-
-              if ($filePath -match "\.png$") {
-                $hasPng = $true
-              }
-
-              if ($firstNumber -gt 1 -or $firstNumber -ne $secondNumber) {
-                $diff = $true
-              }
-
-              if ($hasPng -and $diff) {
-                break
-              }
-          }
-
-          $changes = $hasPng -or $diff
-
-          Write-Output "diff: $diff"
-          Write-Output "hasPng: $hasPng"
-          Write-Output "changes: $changes"
-
-          Write-Output "contains_png=$hasPng" >> $env:GITHUB_OUTPUT
-          Write-Output "changes=$changes" >> $env:GITHUB_OUTPUT
+        run: pwsh tools/ResourceUpdateValidator/script.ps1
 
       - name: Setup python
         if: steps.check_sorted_templates.outputs.contains_png == 'True'
@@ -263,22 +221,26 @@ jobs:
           git add .
 
           $commit_msg = "${{ github.event.inputs.commit_message }}"
-          if (-not [string]::IsNullOrWhiteSpace($commit_msg)) {
-            $commit_msg = $commit_msg.Trim()
-          } else {
+          if ([string]::IsNullOrWhiteSpace($commit_msg)) {
             $commit_msg = "chore: Auto Update Game Resources - $(Get-Date -Format 'yyyy-MM-dd')"
+          } else {
+            $commit_msg = $commit_msg.Trim()
           }
-          git commit -m "$commit_msg" -m "[skip changelog]"
+
+          $run_url = "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
+          git commit -m "$commit_msg" -m "$run_url" -m "[skip changelog]"
           if ($LASTEXITCODE -eq 0) {
             Write-Output "have_commits=True" >> $env:GITHUB_OUTPUT
           }
 
-          git pull origin $(git rev-parse --abbrev-ref HEAD) --unshallow --rebase
+          git pull origin ${{ github.ref_name }} --rebase
 
       - name: Push changes
         if: steps.add_files.outputs.have_commits == 'True'
         uses: ad-m/github-push-action@master
         with:
+          branch: ${{ github.ref }}
           github_token: ${{ secrets.MAA_RESOURCE_SYNC }}
 
       - name: Update OTA resource

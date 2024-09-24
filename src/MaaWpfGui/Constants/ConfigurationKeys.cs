@@ -41,6 +41,7 @@ namespace MaaWpfGui.Constants
         public const string LoadWindowPlacement = "GUI.Placement.Load";
         public const string SaveWindowPlacement = "GUI.Placement.SaveOnClosing";
         public const string UseAlternateStage = "GUI.UseAlternateStage";
+        public const string AllowUseStoneSave = "GUI.AllowUseStoneSave";
         public const string HideUnavailableStage = "GUI.HideUnavailableStage";
         public const string HideSeries = "GUI.HideSeries";
         public const string CustomStageCode = "GUI.CustomStageCode";
@@ -51,6 +52,7 @@ namespace MaaWpfGui.Constants
         public const string Cheers = "GUI.Cheers";
         public const string Hangover = "GUI.Hangover";
         public const string LastBuyWineTime = "GUI.LastBuyWineTime";
+        public const string CustomCulture = "GUI.CustomCulture";
 
         public const string AddressHistory = "Connect.AddressHistory";
         public const string AutoDetect = "Connect.AutoDetect";
@@ -62,6 +64,9 @@ namespace MaaWpfGui.Constants
         public const string MuMu12EmulatorPath = "Connect.MuMu12EmulatorPath";
         public const string MuMu12Index = "Connect.MuMu12Index";
         public const string MuMu12Display = "Connect.MuMu12Display";
+        public const string LdPlayerExtrasEnabled = "Connect.LdPlayerExtras.Enabled";
+        public const string LdPlayerEmulatorPath = "Connect.LdPlayerEmulatorPath";
+        public const string LdPlayerIndex = "Connect.LdPlayerIndex";
         public const string RetryOnAdbDisconnected = "Connect.RetryOnDisconnected";
         public const string AllowAdbRestart = "Connect.AllowADBRestart";
         public const string AllowAdbHardRestart = "Connect.AllowADBHardRestart";
@@ -138,6 +143,8 @@ namespace MaaWpfGui.Constants
         public const string ReclamationTheme = "Reclamation.Theme";
         public const string ReclamationMode = "Reclamation.Mode";
         public const string ReclamationToolToCraft = "Reclamation.ToolToCraft";
+        public const string ReclamationIncrementMode = "Reclamation.ReclamationIncrementMode";
+        public const string ReclamationMaxCraftCountPerRound = "Reclamation.ReclamationMaxCraftCountPerRound";
 
         public const string RecruitMaxTimes = "AutoRecruit.MaxTimes";
         public const string AutoRecruitFirstList = "AutoRecruit.AutoRecruitFirstList";
@@ -208,6 +215,7 @@ namespace MaaWpfGui.Constants
         public const string Stage3 = "MainFunction.Stage3";
         public const string UseMedicine = "MainFunction.UseMedicine";
         public const string UseMedicineQuantity = "MainFunction.UseMedicine.Quantity";
+        public const string UseStone = "MainFunction.UseStone";
         public const string UseStoneQuantity = "MainFunction.UseStone.Quantity";
         public const string TimesLimited = "MainFunction.TimesLimited";
         public const string TimesLimitedQuantity = "MainFunction.TimesLimited.Quantity";
@@ -260,14 +268,16 @@ namespace MaaWpfGui.Constants
 
         public const string GachaShowDisclaimerNoMore = "Gacha.ShowDisclaimerNoMore";
 
+        public const string PeepTargetFps = "Peep.TargetFps";
+
         public const string GuideStepIndex = "Guide.StepIndex";
 
         public const string ForceScheduledStart = "Timer.ForceScheduledStart";
         public const string ShowWindowBeforeForceScheduledStart = "Timer.ShowWindowBeforeForceScheduledStart";
         public const string CustomConfig = "Timer.CustomConfig";
 
-        public const string AnnouncementInfo = "Announcement.AnnouncementInfo";
-        public const string DoNotRemindThisAnnouncementAgain = "Announcement.DoNotRemindThisAnnouncementAgain";
-        public const string DoNotShowAnnouncement = "Announcement.DoNotShowAnnouncement";
+        // public const string AnnouncementInfo = "Announcement.AnnouncementInfo";// 已迁移
+        // public const string DoNotRemindThisAnnouncementAgain = "Announcement.DoNotRemindThisAnnouncementAgain";// 已迁移
+        // public const string DoNotShowAnnouncement = "Announcement.DoNotShowAnnouncement";// 已迁移
     }
 }

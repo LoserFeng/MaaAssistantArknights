@@ -12,6 +12,7 @@
 // </copyright>
 #nullable enable
 using System;
+using System.Buffers;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
@@ -51,6 +52,8 @@ namespace MaaWpfGui.Main
     {
         private readonly RunningState _runningState;
         private static readonly ILogger _logger = Log.ForContext<AsstProxy>();
+
+        public DateTimeOffset StartTaskTime { get; set; }
 
         private static unsafe byte[] EncodeNullTerminatedUtf8(string s)
         {
@@ -117,6 +120,11 @@ namespace MaaWpfGui.Main
             AsstSetConnectionExtras("MuMuEmulator12", extras);
         }
 
+        private static void AsstSetConnectionExtrasLdPlayer(string extras)
+        {
+            AsstSetConnectionExtras("LDPlayer", extras);
+        }
+
         private static unsafe AsstTaskId AsstAppendTask(AsstHandle handle, string type, string taskParams)
         {
             fixed (byte* ptr1 = EncodeNullTerminatedUtf8(type),
@@ -155,36 +163,62 @@ namespace MaaWpfGui.Main
 
         public static unsafe BitmapImage? AsstGetImage(AsstHandle handle)
         {
-            byte[] buff = new byte[1280 * 720 * 3];
-            ulong readSize;
-            fixed (byte* ptr = buff)
-            {
-                readSize = MaaService.AsstGetImage(handle, ptr, (ulong)buff.Length);
-            }
-
-            if (readSize == MaaService.AsstGetNullSize())
-            {
-                return null;
-            }
-
+            var buffer = ArrayPool<byte>.Shared.Rent(1280 * 720 * 3);
             try
             {
+                ulong readSize;
+                fixed (byte* ptr = buffer)
+                {
+                    readSize = MaaService.AsstGetImage(handle, ptr, (ulong)buffer.Length);
+                }
+
+                if (readSize == MaaService.AsstGetNullSize())
+                {
+                    return null;
+                }
+
                 // buff is a png data
                 var image = new BitmapImage();
                 image.BeginInit();
-                image.StreamSource = new MemoryStream(buff, 0, (int)readSize);
+                using var stream = new MemoryStream(buffer, 0, (int)readSize, false);
+                image.StreamSource = stream;
+                image.CacheOption = BitmapCacheOption.OnLoad;
+                image.CreateOptions = BitmapCreateOptions.IgnoreColorProfile;
                 image.EndInit();
+                image.Freeze();
                 return image;
             }
-            catch (Exception)
+            finally
             {
-                return null;
+                ArrayPool<byte>.Shared.Return(buffer);
             }
+        }
+
+        public static async Task<BitmapImage?> AsstGetImageAsync(AsstHandle handle)
+        {
+            return await Task.Run(() => AsstGetImage(handle));
         }
 
         public BitmapImage? AsstGetImage()
         {
             return AsstGetImage(_handle);
+        }
+
+        public BitmapImage? AsstGetFreshImage()
+        {
+            MaaService.AsstAsyncScreencap(_handle, true);
+            return AsstGetImage(_handle);
+        }
+
+        public async Task<BitmapImage?> AsstGetImageAsync()
+        {
+            return await AsstGetImageAsync(_handle);
+        }
+
+        public async Task<BitmapImage?> AsstGetFreshImageAsync()
+        {
+            MaaService.AsstAsyncScreencap(_handle, true);
+            return await AsstGetImageAsync(_handle);
         }
 
         private readonly MaaService.CallbackDelegate _callback;
@@ -533,6 +567,20 @@ namespace MaaWpfGui.Main
                                 }
 
                                 break;
+                            case "LDPlayer":
+                                if (Instances.SettingsViewModel.LdPlayerExtras.Enable && method != "LDExtras")
+                                {
+                                    Instances.TaskQueueViewModel.AddLog(LocalizationHelper.GetString("LdExtrasNotEnabledMessage"), UiLogColor.Error);
+                                    Instances.CopilotViewModel.AddLog(LocalizationHelper.GetString("LdExtrasNotEnabledMessage"), UiLogColor.Error, showTime: false);
+                                    needToStop = true;
+                                }
+                                else if (timeCost < 100)
+                                {
+                                    color = UiLogColor.LdSpecialScreenshot;
+                                    method = "LDExtras";
+                                }
+
+                                break;
                         }
 
                         fastestScreencapStringBuilder.Insert(0, string.Format(LocalizationHelper.GetString("FastestWayToScreencap"), costString, method));
@@ -799,25 +847,32 @@ namespace MaaWpfGui.Main
                     Instances.TaskQueueViewModel.ResetFightVariables();
                     Instances.TaskQueueViewModel.ResetTaskSelection();
                     _runningState.SetIdle(true);
-                    Instances.RecognizerViewModel.GachaDone = true;
 
                     if (isMainTaskQueueAllCompleted)
                     {
-                        var allTaskCompleteTitle = LocalizationHelper.GetString("AllTasksComplete");
+                        var dateTimeNow = DateTimeOffset.Now;
+                        var diffTaskTime = (dateTimeNow - StartTaskTime).ToString(@"h\h\ m\m\ s\s");
+
+                        var allTaskCompleteTitle = string.Format(LocalizationHelper.GetString("AllTasksComplete"), diffTaskTime);
                         var allTaskCompleteMessage = LocalizationHelper.GetString("AllTaskCompleteContent");
                         var sanityReport = LocalizationHelper.GetString("SanityReport");
 
                         var configurationPreset = ConfigurationHelper.GetCurrentConfiguration();
 
                         allTaskCompleteMessage = allTaskCompleteMessage
-                            .Replace("{DateTime}", DateTimeOffset.Now.ToString("yyyy-MM-dd HH:mm:ss"))
-                            .Replace("{Preset}", configurationPreset);
+                            .Replace("{DateTime}", dateTimeNow.ToString("yyyy-MM-dd HH:mm:ss"))
+                            .Replace("{Preset}", configurationPreset)
+                            .Replace("{TimeDiff}", diffTaskTime);
+
+                        var allTaskCompleteLog = string.Format(LocalizationHelper.GetString("AllTasksComplete"), diffTaskTime);
+
                         if (SanityReport.HasSanityReport)
                         {
                             var recoveryTime = SanityReport.ReportTime.AddMinutes(SanityReport.Sanity[0] < SanityReport.Sanity[1] ? (SanityReport.Sanity[1] - SanityReport.Sanity[0]) * 6 : 0);
                             sanityReport = sanityReport.Replace("{DateTime}", recoveryTime.ToString("yyyy-MM-dd HH:mm")).Replace("{TimeDiff}", (recoveryTime - DateTimeOffset.Now).ToString(@"h\h\ m\m"));
 
-                            Instances.TaskQueueViewModel.AddLog(LocalizationHelper.GetString("AllTasksComplete") + Environment.NewLine + sanityReport);
+                            allTaskCompleteLog = allTaskCompleteLog + Environment.NewLine + sanityReport;
+                            Instances.TaskQueueViewModel.AddLog(allTaskCompleteLog);
                             ExternalNotificationService.Send(allTaskCompleteTitle, allTaskCompleteMessage + Environment.NewLine + sanityReport);
 
                             if (_toastNotificationTimer is not null)
@@ -838,7 +893,7 @@ namespace MaaWpfGui.Main
                         }
                         else
                         {
-                            Instances.TaskQueueViewModel.AddLog(LocalizationHelper.GetString("AllTasksComplete"));
+                            Instances.TaskQueueViewModel.AddLog(allTaskCompleteLog);
                             ExternalNotificationService.Send(allTaskCompleteTitle, allTaskCompleteMessage);
                         }
 
@@ -1425,15 +1480,21 @@ namespace MaaWpfGui.Main
 
                 case "PenguinId":
                     {
-                        string id = subTaskDetails!["id"]?.ToString();
+                        string id = subTaskDetails!["id"]?.ToString() ?? string.Empty;
                         Instances.SettingsViewModel.PenguinId = id;
 
                         break;
                     }
 
                 case "BattleFormation":
-                    Instances.CopilotViewModel.AddLog(LocalizationHelper.GetString("BattleFormation") + "\n[" +
-                        string.Join(", ", subTaskDetails!["formation"]?.ToObject<List<string>>().Select(oper => DataHelper.GetLocalizedCharacterName(oper))) + "]");
+                    Instances.CopilotViewModel.AddLog(
+                        LocalizationHelper.GetString("BattleFormation") +
+                        "\n[" +
+                        string.Join(
+                            ", ",
+                            (subTaskDetails!["formation"]?.ToObject<List<string?>>() ?? [])
+                                .Select(oper => DataHelper.GetLocalizedCharacterName(oper) ?? oper)
+                                .Where(oper => !string.IsNullOrEmpty(oper))) + "]");
                     break;
 
                 case "BattleFormationSelected":
@@ -1449,11 +1510,12 @@ namespace MaaWpfGui.Main
                             Instances.CopilotViewModel.AddLog(doc, string.IsNullOrEmpty(color) ? UiLogColor.Message : color);
                         }
 
+                        var target = subTaskDetails["target"]?.ToString();
                         Instances.CopilotViewModel.AddLog(
                             string.Format(
                                 LocalizationHelper.GetString("CurrentSteps"),
                                 subTaskDetails["action"],
-                                DataHelper.GetLocalizedCharacterName(subTaskDetails["target"]?.ToString())));
+                                DataHelper.GetLocalizedCharacterName(target) ?? target));
 
                         break;
                     }
@@ -1749,6 +1811,9 @@ namespace MaaWpfGui.Main
                 case "MuMuEmulator12":
                     AsstSetConnectionExtrasMuMu12(Instances.SettingsViewModel.MuMuEmulator12Extras.Config);
                     break;
+                case "LDPlayer":
+                    AsstSetConnectionExtrasLdPlayer(Instances.SettingsViewModel.LdPlayerExtras.Config);
+                    break;
             }
 
             if (Instances.SettingsViewModel.AutoDetectConnection)
@@ -1829,14 +1894,21 @@ namespace MaaWpfGui.Main
 
         private static bool AutoDetectConnection(ref string error)
         {
-            string bsHvAddress = Instances.SettingsViewModel.TryToSetBlueStacksHyperVAddress();
-
+            // 本地设备如果选了自动检测，还是重新检测一下，不然重新插拔地址变了之后就再也不会检测了
+            /*
             // tcp连接测试端口是否有效，超时时间500ms
             // 如果是本地设备，没有冒号
-            bool adbResult =
-                (!Instances.SettingsViewModel.ConnectAddress.Contains(':') &&
-                 !string.IsNullOrEmpty(Instances.SettingsViewModel.ConnectAddress)) ||
-                IfPortEstablished(Instances.SettingsViewModel.ConnectAddress);
+            bool adbResult = !string.IsNullOrEmpty(Instances.SettingsViewModel.AdbPath) &&
+                             ((!Instances.SettingsViewModel.ConnectAddress.Contains(':') &&
+                               !string.IsNullOrEmpty(Instances.SettingsViewModel.ConnectAddress)) ||
+                              IfPortEstablished(Instances.SettingsViewModel.ConnectAddress));
+            */
+
+            var adbPath = Instances.SettingsViewModel.AdbPath;
+            bool adbResult = !string.IsNullOrEmpty(adbPath) &&
+                             File.Exists(adbPath) &&
+                             Path.GetFileName(adbPath).Contains("adb", StringComparison.InvariantCultureIgnoreCase) &&
+                             IfPortEstablished(Instances.SettingsViewModel.ConnectAddress);
 
             if (adbResult)
             {
@@ -1844,19 +1916,22 @@ namespace MaaWpfGui.Main
                 return true;
             }
 
-            bool bsResult = IfPortEstablished(bsHvAddress);
-
-            if (bsResult)
+            // 蓝叠的特殊处理
             {
-                error = string.Empty;
-                if (string.IsNullOrEmpty(Instances.SettingsViewModel.AdbPath) && Instances.SettingsViewModel.DetectAdbConfig(ref error))
+                string bsHvAddress = Instances.SettingsViewModel.TryToSetBlueStacksHyperVAddress() ?? string.Empty;
+                bool bsResult = IfPortEstablished(bsHvAddress);
+                if (bsResult)
                 {
-                    return string.IsNullOrEmpty(error);
-                }
-                Instances.SettingsViewModel.ConnectAddress = bsHvAddress;
-                return true;
-            }
+                    error = string.Empty;
+                    if (string.IsNullOrEmpty(Instances.SettingsViewModel.AdbPath) && Instances.SettingsViewModel.DetectAdbConfig(ref error))
+                    {
+                        return string.IsNullOrEmpty(error);
+                    }
 
+                    Instances.SettingsViewModel.ConnectAddress = bsHvAddress;
+                    return true;
+                }
+            }
 
             if (Instances.SettingsViewModel.DetectAdbConfig(ref error))
             {
@@ -2451,15 +2526,19 @@ namespace MaaWpfGui.Main
         ///     </item>
         /// </list>
         /// </param>
-        /// <param name="toolToCraft">要合成的支援道具。</param>
+        /// <param name="toolToCraft">要组装的支援道具。</param>
+        /// <param name="incrementMode">点击类型：0 连点；1 长按</param>
+        /// <param name="numCraftBatches">单次最大制造轮数</param>
         /// <returns>是否成功。</returns>
-        public bool AsstAppendReclamation(string theme = "Tales", int mode = 1, string toolToCraft = "荧光棒")
+        public bool AsstAppendReclamation(string theme = "Tales", int mode = 1, string toolToCraft = "", int incrementMode = 0, int numCraftBatches = 16)
         {
             var taskParams = new JObject
             {
                 ["theme"] = theme,
                 ["mode"] = mode,
                 ["tool_to_craft"] = toolToCraft,
+                ["increment_mode"] = incrementMode,
+                ["num_craft_batches"] = numCraftBatches,
             };
             AsstTaskId id = AsstAppendTaskWithEncoding("Reclamation", taskParams);
             _latestTaskId[TaskType.Reclamation] = id;
@@ -2546,24 +2625,13 @@ namespace MaaWpfGui.Main
                 ["task_names"] = new JArray
                 {
                     once ? "GachaOnce" : "GachaTenTimes",
+
+                    // TEST
+                    // "Block",
                 },
             };
             AsstTaskId id = AsstAppendTaskWithEncoding("Custom", taskParams);
             _latestTaskId[TaskType.Gacha] = id;
-            return id != 0 && AsstStart();
-        }
-
-        public bool AsstStartTestLink()
-        {
-            var taskParams = new JObject
-            {
-                ["task_names"] = new JArray
-                {
-                    "Home",
-                },
-            };
-            AsstTaskId id = AsstAppendTaskWithEncoding("Custom", taskParams);
-            _latestTaskId[TaskType.Custom] = id;
             return id != 0 && AsstStart();
         }
 
